@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Now Playing · 560×160</title>
+<!--
+  A theme-agnostic "Now Playing" widget for OBS browser sources.
+
+  It's a pure RENDERER: it exposes window.setNowPlaying({title,artist,album,source,
+  dot,art,duration,elapsed}) and a transport script feeds it. This build ships the
+  Tuna adapter (client/tuna.js), which reads the free Tuna OBS plugin — Tuna does the
+  actual VLC / Tidal reading (VLC via its "OBS VLC Source", Tidal via "Windows Media
+  Control"/SMTC) and serves JSON the browser can fetch. No bespoke backend required.
+
+  REBRANDING: override the CSS custom properties in :root (colors, fonts, radius).
+  A client theme is ~6 variables. Per-source dot colors and the accent are variables too.
+
+  URL params (all optional): ?source=Tidal|VLC|Spotify (label + dot),
+  ?tunaHost=127.0.0.1 &tunaPort=1608, ?pollMs=1000, ?theme=… (your own).
+-->
+<style>
+:root{
+  /* ── Rebranding surface — override these for a client theme ── */
+  --bg-1:#171c26; --bg-2:#0e1218;         /* card gradient */
+  --border:#2a3444;                        /* card border */
+  --text:#eef2f7; --sub:#c4cdda; --muted:#8593a6;
+  --accent:#57c9e6;                        /* eyebrow, progress, eq, default dot */
+  --art-bg:#1b2331;                        /* album-art tile background */
+  --radius:14px;
+  --font:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+  --title-font:var(--font);
+  /* Per-source dots (brand-ish) */
+  --dot-tidal:#33e5e5; --dot-vlc:#e8862b; --dot-spotify:#1db954;
+  --dot-deezer:#a238ff; --dot-ytmusic:#ff3b30; --dot-apple:#fb2c53; --dot-amazon:#25d1da;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:transparent;overflow:hidden;width:100%;height:100%;}
+body{font-family:var(--font);color:var(--text);}
+.stage{position:relative;width:560px;height:160px;}
+.np{position:absolute;inset:0;display:flex;gap:20px;align-items:center;padding:16px 22px 16px 16px;
+  background:linear-gradient(180deg,var(--bg-1),var(--bg-2));
+  border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 14px 40px rgba(0,0,0,.5);}
+.art{position:relative;width:118px;height:118px;flex:0 0 auto;border-radius:calc(var(--radius) - 6px);
+  overflow:hidden;background:radial-gradient(120% 120% at 30% 20%,color-mix(in srgb,var(--art-bg) 80%,#fff 6%),var(--art-bg));
+  border:1px solid color-mix(in srgb,var(--border) 70%,#fff 10%);}
+.art .cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
+.art .scrim{position:absolute;inset:0;display:none;background:linear-gradient(to top,transparent 58%,rgba(0,0,0,.45));}
+.art.has-art .cover,.art.has-art .scrim{display:block;}
+.art.has-art .fallback{display:none;}
+.fallback{position:absolute;inset:0;margin:auto;width:52px;height:52px;color:var(--accent);opacity:.75;}
+.dot{position:absolute;top:8px;right:8px;width:11px;height:11px;border-radius:50%;z-index:2;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+.body{flex:1;min-width:0;}
+.eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:5px;}
+.eyebrow .lbl{font-size:11px;letter-spacing:.34em;color:var(--accent);text-transform:uppercase;}
+.eq{display:flex;align-items:flex-end;gap:3px;height:14px;}
+.eq span{width:3px;background:var(--accent);border-radius:2px;animation:eqBar .7s ease-in-out infinite alternate;}
+@keyframes eqBar{0%{height:22%;}50%{height:100%;}100%{height:40%;}}
+.title{font-family:var(--title-font);font-weight:700;font-size:27px;color:var(--text);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.meta{font-size:15px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.meta .src{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+.prog{display:flex;align-items:center;gap:11px;margin-top:11px;}
+.prog .t{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.bar{flex:1;height:5px;border-radius:10px;background:color-mix(in srgb,var(--accent) 16%,transparent);overflow:hidden;}
+.bar .fill{height:100%;width:0;border-radius:10px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 65%,#000),var(--accent));transition:width .3s linear;}
+/* Title marquee — seamless duplicate-track, built by JS only when the title overflows. */
+.mq-track{display:inline-flex;align-items:center;white-space:nowrap;will-change:transform;animation:mqScroll linear infinite;}
+.mq-sep{padding:0 22px;color:var(--accent);opacity:.7;}
+@keyframes mqScroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+</style></head>
+<body>
+<div class="stage"><div class="np">
+  <div class="art" id="art">
+    <img class="cover" data-mart alt="" decoding="async"><div class="scrim"></div>
+    <svg class="fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <span class="dot" data-mdot></span>
+  </div>
+  <div class="body">
+    <div class="eyebrow"><span class="lbl">Now Playing</span>
+      <div class="eq"><span style="animation-delay:0s"></span><span style="animation-delay:.18s"></span><span style="animation-delay:.33s"></span><span style="animation-delay:.48s"></span><span style="animation-delay:.1s"></span></div></div>
+    <div class="title" data-mt></div>
+    <div class="meta"><span data-ma></span> <span class="src" data-ms></span></div>
+    <div class="prog"><span class="t" data-me></span><div class="bar"><div class="fill" data-mbar></div></div><span class="t" data-md></span></div>
+  </div>
+</div></div>
+
+<script>(function(){
+  var q=new URLSearchParams(location.search);
+  // Per-source dot color from CSS vars (client can restyle by overriding them).
+  function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  var DOTS={Tidal:cssVar('--dot-tidal'),VLC:cssVar('--dot-vlc'),Spotify:cssVar('--dot-spotify'),
+    Deezer:cssVar('--dot-deezer'),'YouTube Music':cssVar('--dot-ytmusic'),'Apple Music':cssVar('--dot-apple'),'Amazon Music':cssVar('--dot-amazon')};
+
+  // Demo rotation so the widget looks alive before a real track arrives.
+  var demo=[
+    {t:'Nightcall',a:'Kavinsky',al:'OutRun',s:'Tidal',d:258},
+    {t:'Time',a:'Hans Zimmer',al:'Inception OST',s:'VLC',d:275}
+  ];
+  var i=0,el=42,live=false,playing=true,curTitle=null;
+  function fmt(n){n=Math.max(0,n|0);return (n/60|0)+':'+String(n%60).padStart(2,'0');}
+  function set(sel,fn){document.querySelectorAll(sel).forEach(fn);}
+  function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+
+  var SPEED=55;
+  function renderTitle(text,force){
+    text=String(text==null?'':text);curTitle=text;
+    set('[data-mt]',function(node){
+      if(!force&&node.__mt===text)return;node.__mt=text;
+      node.classList.remove('is-marquee');node.textContent=text;
+      if(node.scrollWidth>node.clientWidth+1){
+        var unit=esc(text)+'<span class="mq-sep">◆</span>';
+        node.innerHTML='<span class="mq-track">'+unit+unit+'</span>';
+        var tr=node.firstChild;tr.style.animationDuration=Math.max(7,(tr.scrollWidth/2)/SPEED).toFixed(1)+'s';
+      }
+    });
+  }
+  var lastArt=null;
+  function renderArt(art){
+    art=(typeof art==='string')?art:'';if(art===lastArt)return;lastArt=art;
+    set('[data-mart]',function(img){var tile=img.closest('.art');
+      if(art){img.src=art;if(tile)tile.classList.add('has-art');}
+      else{img.removeAttribute('src');if(tile)tile.classList.remove('has-art');}});
+  }
+  set('[data-mart]',function(img){img.addEventListener('error',function(){var tile=img.closest('.art');if(tile)tile.classList.remove('has-art');lastArt=null;});});
+
+  function render(){var k=demo[i];
+    renderTitle(k.t);renderArt(k.art);
+    set('[data-ma]',function(e){e.textContent=k.a;});
+    set('[data-ms]',function(e){e.textContent=[k.s,k.al].filter(Boolean).join(' · ');});
+    set('[data-me]',function(e){e.textContent=fmt(el);});
+    set('[data-md]',function(e){e.textContent=fmt(k.d);});
+    var p=k.d?Math.min(100,el/k.d*100):0;set('[data-mbar]',function(e){e.style.width=p+'%';});
+    var dot=k.dot||DOTS[k.s]||cssVar('--accent');
+    set('[data-mdot]',function(e){e.style.background=dot;e.style.boxShadow='0 0 8px '+dot;});}
+  render();
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){renderTitle(curTitle,true);});
+
+  // Local 1s tick: advance the progress OURSELVES while playing (SMTC/Tuna only
+  // reports position on play/pause/seek, so we can't rely on the feed for smooth
+  // motion). Adapters correct `el` via setNowPlaying whenever the source really moves.
+  setInterval(function(){if(playing){el++;if(el>=demo[i].d){if(live){el=demo[i].d;}else{i=(i+1)%demo.length;el=0;}}}render();},1000);
+  window.__musicGoLive=function(){live=true;};
+
+  // Transport contract: adapters call this with a normalized track. `elapsed` is an
+  // authoritative correction (omit it to keep the local tick running); `playing`
+  // gates the tick (pause the bar when the source is paused).
+  window.setNowPlaying=function(o){var k=demo[i];
+    if(o.title!=null)k.t=o.title;if(o.artist!=null)k.a=o.artist;if(o.album!=null)k.al=o.album;
+    if(o.source!=null)k.s=o.source;if(o.dot!=null)k.dot=o.dot;if(o.art!=null)k.art=o.art;
+    if(o.duration!=null)k.d=o.duration;if(typeof o.elapsed==='number')el=o.elapsed;
+    if(typeof o.playing==='boolean')playing=o.playing;render();};
+})();</script>
+<!-- ── SETUP (edit for your machine) ─────────────────────────────────────────────
+     OBS "Local File" browser sources can't take ?query= params, so configure the
+     widget here instead. If you serve this over http:// (Tuna/OBS-dock/any server),
+     URL params like ?source=Tidal&tunaPort=1608 also work and override these. -->
+<script>
+  window.__NP = {
+    source: '',           // 'Tidal' | 'VLC' | 'Spotify' | 'Apple Music' | '' (no chip)
+    tunaHost: '127.0.0.1',
+    tunaPort: 1608,        // Tuna → Settings → enable "Web server", match this port
+    // debug: true,        // uncomment to log Tuna's data to the browser console
+  };
+</script>
+<!-- Tuna adapter: reads the Tuna OBS plugin (VLC + Tidal → JSON) and feeds setNowPlaying. -->
+<script src="client/tuna.js"></script>
+</body></html>

@@ -1,0 +1,12 @@
+{
+  "name": "cadence-nowplaying",
+  "version": "0.1.0",
+  "description": "Rebrandable OBS Now-Playing widget fed by the free Tuna plugin — shows Tidal, VLC, Spotify (free too), Apple Music, or anything on Windows media controls. No accounts, no bespoke backend.",
+  "license": "MIT",
+  "author": "Ashe \"Flash\" Galatine <AsheJunius@gmail.com>",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "verify": "node test/verify.mjs"
+  }
+}
