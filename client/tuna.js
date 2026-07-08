@@ -31,6 +31,7 @@
   var DEBUG = q.get('debug') === '1' || NP.debug === true;  // log Tuna's raw JSON + mapped track
 
   var live = false;
+  var lastTitle = null;
   if (DEBUG) console.log('[tuna] polling ' + BASE + '/ every ' + POLL + 'ms');
 
   // Tuna's JSON carries no reliable "source" field, so detect it: an explicit
@@ -86,7 +87,17 @@
           var snap = snapshotEpoch(j);
           if (!isNaN(snap)) { var extra = Date.now() - snap; if (extra >= 0 && extra < 12 * 3600 * 1000) elapsedMs += extra; }
         }
-        if (durMs > 0) elapsedMs = Math.min(elapsedMs, durMs);
+        if (durMs > 0 && elapsedMs > durMs) {
+          // Past the end. On Repeat, the SAME title keeps playing but the source (SMTC)
+          // doesn't re-report the reset position, so extrapolation runs off the end. If
+          // we're still on the same title well past the end, treat it as a loop and WRAP
+          // the bar so it doesn't stick at 100%; otherwise hold at 100% (a normal ending —
+          // the next track's metadata resets us within ~1s).
+          elapsedMs = (playing && title === lastTitle && (elapsedMs - durMs) > 1500)
+            ? elapsedMs % durMs
+            : durMs;
+        }
+        lastTitle = title;
         // Cover comes from Tuna's /cover.png. Cache-bust per TRACK (not per poll) so a
         // new cover loads but the same track doesn't reload every second.
         var art = BASE + '/cover.png?ck=' + encodeURIComponent(title);

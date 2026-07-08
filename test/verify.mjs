@@ -20,9 +20,9 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascri
 let pass = 0, fail = 0;
 const check = (n, ok, d) => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${n}${!ok && d ? ' — ' + d : ''}`); };
 
-function startMock() {
+function startMock(port, mode) {
   return new Promise((res, rej) => {
-    const c = spawn(process.execPath, ['test/mock-tuna.mjs'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TUNA_PORT: String(TUNA_PORT) } });
+    const c = spawn(process.execPath, ['test/mock-tuna.mjs'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TUNA_PORT: String(port), TUNA_MODE: mode || 'normal' } });
     let o = ''; const t = setTimeout(() => rej(new Error('mock-tuna no start\n' + o)), 6000);
     c.stdout.setEncoding('utf8'); c.stdout.on('data', (d) => { o += d; if (o.includes('mock-tuna')) { clearTimeout(t); res(c); } });
     c.stderr.setEncoding('utf8'); c.stderr.on('data', (d) => { o += d; });
@@ -47,7 +47,7 @@ async function launch() {
   console.log('Now-Playing widget — Tuna adapter verification\n');
   let mock, ws, browser;
   try {
-    mock = await startMock();
+    mock = await startMock(TUNA_PORT, 'normal');
     ws = await startWidgetServer();
     console.log(`mock Tuna :${TUNA_PORT} (CORS), widget :${WIDGET_PORT}\n`);
     browser = await launch();
@@ -96,6 +96,21 @@ async function launch() {
     const shot = resolve(ROOT, 'test', 'render-check.png');
     await page.screenshot({ path: shot });
     console.log('  screenshot →', shot);
+
+    // ── Repeat/loop regression: a looping track must WRAP the bar, not stick at 100% ──
+    console.log('\n[repeat] song on Repeat — the bar must reset, not stick at 100%');
+    const mockR = await startMock(1698, 'repeat');
+    try {
+      const pageR = await browser.newPage({ viewport: { width: 560, height: 160 } });
+      await pageR.goto(`http://127.0.0.1:${WIDGET_PORT}/now-playing-560x160.html?tunaPort=1698`, { waitUntil: 'load' });
+      await pageR.waitForTimeout(4000); // 2+ polls so the wrap engages past the grace window
+      const me = (await pageR.evaluate(() => (document.querySelector('[data-me]') || {}).textContent || '')).trim();
+      const secs = (() => { const m = String(me).split(':'); return (+m[0]) * 60 + (+m[1]); })();
+      // 30s track, extrapolated ~35-40s → wrapped to ~5-12s. Must be well under 30, not 0:30.
+      check('repeat: bar wraps to loop position (not stuck at 100%)', secs > 0 && secs < 25, me + ' of 0:30');
+      await pageR.close();
+    } finally { mockR.kill(); }
+
     await browser.close();
   } catch (e) {
     fail++; console.log('\n  ERROR ' + e.message);
