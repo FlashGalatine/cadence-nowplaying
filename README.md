@@ -24,6 +24,11 @@ accounts, no OAuth, and no bespoke backend.
   **[docs/THEMING.md](docs/THEMING.md)** to make it yours.
 - **No backend, no accounts, local-only.** One HTML file + the Tuna plugin.
 
+> **Why "for OBS" specifically?** The widget itself is a plain web page and renders in
+> any streaming app with a Chromium browser source (Streamlabs Desktop, XSplit, …) —
+> but its data feed, **Tuna, is an OBS plugin**, so OBS is the supported home. Other
+> apps only work if OBS is also running with Tuna as the data source.
+
 ## Quick start
 
 1. **Install and set up Tuna** (the streamer's side of the data) — full steps in
@@ -95,7 +100,8 @@ for the full contract.
 Built by **Ashe "Flash" Galatine**.
 
 - Email — [AsheJunius@gmail.com](mailto:AsheJunius@gmail.com)
-- X — [@AsheJunius](https://x.com/AsheJunius) · Twitch — [FlashGalatine](https://www.twitch.tv/FlashGalatine)
+- X — [@AsheJunius](https://x.com/AsheJunius) · BlueSky — [@projectgalatine.com](https://bsky.app/profile/projectgalatine.com)
+- Twitch — [FlashGalatine](https://www.twitch.tv/FlashGalatine) · Discord — [Newbie Fight Club](https://discord.gg/NewbieFightClub)
 - Support — Patreon [ProjectGalatine](https://www.patreon.com/ProjectGalatine) · CashApp [$ProjectGalatine](https://cash.app/$ProjectGalatine)
 
 MIT licensed — see [LICENSE](LICENSE). Only reads data you already have locally; no
