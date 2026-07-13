@@ -24,10 +24,12 @@ accounts, no OAuth, and no bespoke backend.
   **[docs/THEMING.md](docs/THEMING.md)** to make it yours.
 - **No backend, no accounts, local-only.** One HTML file + the Tuna plugin.
 
-> **Why "for OBS" specifically?** The widget itself is a plain web page and renders in
-> any streaming app with a Chromium browser source (Streamlabs Desktop, XSplit, …) —
-> but its data feed, **Tuna, is an OBS plugin**, so OBS is the supported home. Other
-> apps only work if OBS is also running with Tuna as the data source.
+> **Which streaming apps?** The widget is a plain web page and renders in any Chromium
+> browser source — OBS, **Meld Studio**, Streamlabs Desktop, XSplit. Its default data
+> feed, **Tuna, is an OBS plugin**, so OBS is the simplest home. For a **non-OBS
+> broadcaster** (Meld, …), swap in the **Streamer.bot adapter** — the same widget, fed
+> over Streamer.bot's local WebSocket instead of Tuna. See
+> **[docs/STREAMERBOT-SETUP.md](docs/STREAMERBOT-SETUP.md)**.
 
 ## Quick start
 
@@ -81,10 +83,16 @@ Streamer.bot's HTTP server, Tuna's own web server, or any static server all work
 
 `now-playing-560x160.html` is a pure renderer exposing
 `window.setNowPlaying({title, artist, album, source, dot, art, duration, elapsed, playing})`.
-`client/tuna.js` polls Tuna's JSON (`http://<host>:<port>/` + `/cover.png`), normalizes
-it, extrapolates the live position, and calls that. Swapping the adapter is the only
-thing needed to feed it from a different source. See [docs/THEMING.md](docs/THEMING.md)
-for the full contract.
+An **adapter** feeds it — swapping the adapter is the only thing needed to change source:
+
+- **`client/tuna.js`** (default) polls Tuna's JSON (`http://<host>:<port>/` + `/cover.png`).
+- **`client/nowplaying-sb.js`** subscribes to Streamer.bot's WebSocket instead — for
+  Meld / non-OBS broadcasters where Tuna can't run
+  (**[docs/STREAMERBOT-SETUP.md](docs/STREAMERBOT-SETUP.md)**; SB-side relays in
+  `streamerbot/`).
+
+Both normalize + extrapolate the live position identically. See
+[docs/THEMING.md](docs/THEMING.md) for the full contract.
 
 ## Compatibility & caveats
 
@@ -94,6 +102,9 @@ for the full contract.
   some apps omit the album or artwork.
 - **Tuna reads one source at a time.** "Windows Media Control" covers most desktop apps
   (Tidal, Spotify, …); use the "OBS VLC Source" option only for VLC playing *inside* OBS.
+- **Non-OBS broadcasters** (Meld Studio, Streamlabs Desktop, XSplit) → use the
+  Streamer.bot adapter instead of Tuna. Any-player coverage needs Streamer.bot (Windows)
+  and the SMTC relay; the Spotify path shows album art, the SMTC path is text-only.
 
 ## Author & support
 
