@@ -33,6 +33,14 @@ accounts, no OAuth, and no bespoke backend.
 
 ## Quick start
 
+First, get the code — either
+
+```
+git clone https://github.com/FlashGalatine/cadence-nowplaying.git
+```
+
+or click **<> Code → Download ZIP** on the repo page and extract it anywhere.
+
 1. **Install and set up Tuna** (the streamer's side of the data) — full steps in
    **[docs/TUNA-SETUP.md](docs/TUNA-SETUP.md)**. In short: install Tuna, set its
    **Source** to *Windows Media Control* and pick your player (e.g. Tidal/Spotify), and
